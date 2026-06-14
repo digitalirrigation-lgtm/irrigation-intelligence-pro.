@@ -8,9 +8,10 @@ import pandas as pd
 import plotly.graph_objects as go
 
 # --- 1. THE GOLDEN HANDSHAKE (Safe Connection) ---
+auth_status = False
 if 'EARTH_ENGINE_KEY' in st.secrets:
     try:
-        # Special Cleaner to fix formatting errors automatically
+        # This part cleans the "Escape" characters automatically
         raw_key = st.secrets['EARTH_ENGINE_KEY']
         ee_key = json.loads(raw_key, strict=False)
         credentials = ee.ServiceAccountCredentials(ee_key['client_email'], key_data=raw_key)
@@ -18,7 +19,6 @@ if 'EARTH_ENGINE_KEY' in st.secrets:
         auth_status = True
     except Exception as e:
         st.error(f"Connection Failed: {e}")
-        auth_status = False
 
 # --- 2. MULTI-LANGUAGE DICTIONARY ---
 languages = {
@@ -30,12 +30,13 @@ languages = {
 
 # --- 3. UI SETUP ---
 st.set_page_config(layout="wide", page_title="Irrigation Pro")
-lang = st.sidebar.selectbox("🌐 Language", list(languages.keys()))
+lang = st.sidebar.selectbox("🌐 Language / ቋንቋ", list(languages.keys()))
 t = languages[lang]
 st.title(t['title'])
 
 # --- 4. GLOBAL LOCATION SWITCH ---
 st.sidebar.header("🌍 Farm Location")
+city = st.sidebar.text_input("Farm Name", "Ziway, Ethiopia")
 lat = st.sidebar.number_input("Latitude", value=7.9000, format="%.4f")
 lon = st.sidebar.number_input("Longitude", value=38.7000, format="%.4f")
 
@@ -48,12 +49,10 @@ with tab1:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,et0_fao_evapotranspiration&timezone=auto"
         res = requests.get(url).json()
         
-        # Current Day Logic
         current_et = res['daily']['et0_fao_evapotranspiration'][0]
         st.metric("Water Needed Today", f"{current_et} mm")
         st.success(f"**Action:** {t['rec']} {current_et}mm to {t['soil']}")
 
-        # 7-Day Weekly Table
         df_weather = pd.DataFrame({
             "Date": res['daily']['time'],
             "Day Temp (°C)": res['daily']['temperature_2m_max'],
@@ -62,7 +61,7 @@ with tab1:
         })
         st.table(df_weather)
     except:
-        st.error("Weather Service Busy. Refreshing...")
+        st.error("Weather Service Busy. Please Wait...")
 
 with tab2:
     st.subheader("📉 40-Year Climate Saga (Past & Future)")
@@ -79,8 +78,24 @@ with tab3:
     if auth_status:
         try:
             m = geemap.Map(center=[lat, lon], zoom=14)
-            # Add Satellite Image logic
             point = ee.Geometry.Point([lon, lat])
-            collection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED').filterBounds(point).filterDate('2024-01-01', '2024-12-31').median()
-            ndvi = collection.normalizedDifference(['B8', 'B4']).rename('NDVI')
-            m.addLayer(ndvi, {'min': 0, 'max': 1, '
+            # Pulling latest satellite image
+            img = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED').filterBounds(point).filterDate('2024-01-01', '2024-12-31').median()
+            ndvi = img.normalizedDifference(['B8', 'B4']).rename('NDVI')
+            # Fixed the line that caused your error:
+            m.addLayer(ndvi, {'min': 0, 'max': 1, 'palette': ['red', 'yellow', 'green']}, 'Crop Health')
+            st_folium(m, width=1000, height=500, key="farm_map")
+        except Exception as e:
+            st.warning(f"Map is loading satellite stream: {e}")
+    else:
+        st.error("Map Disabled: Handshake failed. Check your Secret Key.")
+
+# --- 6. GOLDEN/SILVER FOOTER ---
+st.markdown("---")
+st.markdown(f"""
+<div style="display: flex; justify-content: space-around; text-align: center; font-weight: bold;">
+    <div style="background-color: #FFD700; padding: 20px; border-radius: 15px; width: 32%; color: black;">🏆 GOLD: PROFIT SAVED<br>Precision Pumping Active</div>
+    <div style="background-color: #C0C0C0; padding: 20px; border-radius: 15px; width: 32%; color: black;">🥈 SILVER: SPECS<br>Pipe: 63mm | Pressure: 2.0 Bar</div>
+    <div style="background-color: #000000; padding: 20px; border-radius: 15px; width: 32%; color: white;">⚫ BLACK: HISTORY<br>20 Years Climate Data</div>
+</div>
+""", unsafe_allow_html=True)
