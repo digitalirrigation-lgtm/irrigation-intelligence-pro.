@@ -14,11 +14,11 @@ if "EE_PRIVATE_KEY" in st.secrets:
         )
         ee.Initialize(cred, project=st.secrets["EE_PROJECT_ID"])
         ok = True
-        st.sidebar.success("Handshake: OK")
+        st.sidebar.success("Handshake: OK ✅")
     except Exception as e:
         st.sidebar.error(f"Error: {e}")
 
-# --- 2. MULTILINGUAL ---
+# --- 2. LANGUAGES ---
 langs = {
     "English": {"b1":"Weather","b2":"Farmer","b3":"Past","b4":"Future","b5":"Map"},
     "Amharic (አማርኛ)": {"b1":"አየር ሁኔታ","b2":"እቅድ","b3":"ታሪክ","b4":"ትንበያ","b5":"ካርታ"}
@@ -26,7 +26,7 @@ langs = {
 st.set_page_config(layout="wide")
 sel = st.sidebar.selectbox("🌐 Language", list(langs.keys()))
 tx = langs[sel]
-st.title("Irrigation Pro Dashboard")
+st.title("Irrigation Intelligence Dashboard")
 
 lat = st.sidebar.number_input("Lat", value=7.9)
 lon = st.sidebar.number_input("Lon", value=38.7)
@@ -35,28 +35,24 @@ lon = st.sidebar.number_input("Lon", value=38.7)
 t = st.tabs([tx['b1'], tx['b2'], tx['b3'], tx['b4'], tx['b5']])
 
 with t[0]:
-    st.subheader("☀️ 7-Day Weather")
-    # We break the URL so it doesn't get cut off during paste
-    base = "https://api.open-meteo.com/v1/forecast"
-    p1 = f"?latitude={lat}&longitude={lon}"
-    p2 = "&daily=temperature_2m_max,precipitation_probability_max,et0_fao_evapotranspiration"
-    p3 = "&timezone=auto"
+    st.subheader("☀️ 7-Day Forecast")
     try:
-        r = requests.get(base + p1 + p2 + p3).json()
+        base = "https://api.open-meteo.com/v1/forecast"
+        p = f"?latitude={lat}&longitude={lon}&daily=temperature_2m_max,precipitation_probability_max,et0_fao_evapotranspiration&timezone=auto"
+        r = requests.get(base + p).json()
         et = r['daily']['et0_fao_evapotranspiration'][0]
-        st.metric("Water Lost Today", f"{et} mm")
-        st.success(f"Advice: Apply {et}mm to Clay Loam soil.")
+        st.metric("Water Needed Today", f"{et} mm")
+        st.info(f"Advice: Apply {et}mm to Clay Loam soil.")
         df = pd.DataFrame({"Date": r['daily']['time'], "Temp": r['daily']['temperature_2m_max'], "Rain%": r['daily']['precipitation_probability_max']})
         st.table(df)
-    except: st.write("Loading...")
+    except: st.write("Weather loading...")
 
 with t[1]:
-    st.subheader("📅 Farmer 12-Month Plan")
-    months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-    rain = [10, 20, 60, 100, 80, 50, 150, 180, 100, 40, 20, 10]
-    # Color logic: Red for dry, Green for wet
-    cols = ['red' if x < 35 else 'green' for x in rain]
-    st.plotly_chart(go.Figure(go.Bar(x=months, y=rain, marker_color=cols)))
+    st.subheader("📅 Farmer 1-Year Plan")
+    m = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+    v = [10, 20, 60, 100, 80, 50, 150, 180, 100, 40, 20, 10]
+    cols = ['red' if x < 35 else 'green' for x in v]
+    st.plotly_chart(go.Figure(go.Bar(x=m, y=v, marker_color=cols)))
 
 with t[2]:
     st.subheader("🏛️ 20-Year History (2004-2024)")
@@ -79,15 +75,18 @@ with t[4]:
     st.subheader("🛰️ Satellite Map")
     if ok:
         try:
-            m = geemap.Map(center=[lat, lon], zoom=14)
+            m_obj = geemap.Map(center=[lat, lon], zoom=14)
             p = ee.Geometry.Point([lon, lat]).buffer(2000).bounds()
             img = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED').filterBounds(p).filterDate('2024-01-01','2024-12-31').median()
             ndvi = img.normalizedDifference(['B8', 'B4'])
-            m.addLayer(ndvi, {'min':0, 'max':0.8, 'palette':['red','yellow','green']}, 'Health')
-            st_folium(m, height=500, width=1000)
-        except: st.write("Handshake active. Loading map...")
+            m_obj.addLayer(ndvi, {'min':0, 'max':0.8, 'palette':['red','yellow','green']}, 'Health')
+            st_folium(m_obj, height=500, width=1000)
+        except: st.write("Loading map...")
+    else: st.error("Handshake failed.")
 
-# --- 4. FOOTER ---
+# --- 4. SIMPLE FOOTER ---
 st.markdown("---")
-st.markdown(f"""
-<div style="displa
+c1, c2, c3 = st.columns(3)
+with c1: st.warning("🏆 GOLD: PROFIT SAVED")
+with c2: st.info("🥈 SILVER: 63mm PIPE")
+with c3: st.success("⚫ BLACK: HISTORY DATA")
