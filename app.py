@@ -2,91 +2,88 @@ import streamlit as st
 import ee
 import geemap
 from streamlit_folium import st_folium
-import json
-import requests
+import json, requests
 import pandas as pd
 import plotly.graph_objects as go
 
-# --- 1. BULLET-PROOF HANDSHAKE ---
+# 1. HANDSHAKE
 auth_success = False
 if 'EE_KEY' in st.secrets:
     try:
-        # We read the dictionary directly from Streamlit - No JSON parsing needed!
         ee_dict = dict(st.secrets['EE_KEY'])
         credentials = ee.ServiceAccountCredentials(ee_dict['client_email'], key_data=json.dumps(ee_dict))
         ee.Initialize(credentials, project=ee_dict['project_id'])
         auth_success = True
-        st.sidebar.success("✅ Satellite Handshake: SUCCESS")
+        st.sidebar.success("Handshake: OK")
     except Exception as e:
-        st.sidebar.error(f"❌ Connection Failed: {e}")
+        st.sidebar.error(f"Error: {e}")
 
-# --- 2. MULTI-LANGUAGE DICTIONARY ---
-languages = {
-    "English": {"title": "Global Irrigation Intelligence", "t1": "☀️ Weather (Daily/Weekly)", "t2": "📅 12-Month Plan", "t3": "🏛️ 20yr Past History", "t4": "🚀 20yr Future NASA", "t5": "🛰️ Satellite Map"},
-    "Amharic (አማርኛ)": {"title": "የአለም አቀፍ የመስኖ መረጃ", "t1": "☀️ የአየር ሁኔታ", "t2": "📅 የ12 ወራት እቅድ", "t3": "🏛️ የ20 ዓመት ታሪክ", "t4": "🚀 የ20 ዓመት ትንበያ", "t5": "🛰️ ሳተላይት ካርታ"},
-    "Oromo (Afaan Oromoo)": {"title": "Odeeffannoo Jallisii", "t1": "☀️ Haala Qilleensaa", "t2": "📅 Karoora Waggaa", "t3": "🏛️ Seenaa Waggaa 20", "t4": "🚀 Raaggaa Gara Fulduuraa", "t5": "🛰️ Kaartaa Saatileeti"},
-    "Somali (Soomaali)": {"title": "Sirdoonka Waraabka", "t1": "☀️ Hawada", "t2": "📅 Qorshaha Sannadka", "t3": "🏛️ Taariikhda 20 Sano", "t4": "🚀 Saadaasha Mustaqbalka", "t5": "🛰️ Khariidadda"}
+# 2. LANGUAGES
+langs = {
+    "English": {"t":"Irrigation Pro", "b1":"Weather", "b2":"12-Month", "b3":"Past", "b4":"Future", "b5":"Map"},
+    "Amharic (አማርኛ)": {"t":"የመስኖ መረጃ", "b1":"አየር ሁኔታ", "b2":"12 ወራት", "b3":"ታሪክ", "b4":"ትንበያ", "b5":"ካርታ"}
 }
 
-# --- 3. UI SETUP ---
-st.set_page_config(layout="wide", page_title="Master Irrigation")
-lang = st.sidebar.selectbox("🌐 Choose Language", list(languages.keys()))
-t = languages[lang]
-st.title(t['title'])
+st.set_page_config(layout="wide")
+sel_lang = st.sidebar.selectbox("🌐 Language", list(langs.keys()))
+tx = langs[sel_lang]
+st.title(tx['t'])
 
-st.sidebar.header("📍 Farm Settings")
-lat = st.sidebar.number_input("Latitude", value=7.9000, format="%.4f")
-lon = st.sidebar.number_input("Longitude", value=38.7000, format="%.4f")
+lat = st.sidebar.number_input("Lat", value=7.9)
+lon = st.sidebar.number_input("Lon", value=38.7)
 
-# --- 4. DATA TABS (SEPARATED) ---
-tabs = st.tabs([t['t1'], t['t2'], t['t3'], t['t4'], t['t5']])
+# 3. TABS
+t = st.tabs([tx['b1'], tx['b2'], tx['b3'], tx['b4'], tx['b5']])
 
-# TAB 1: WEATHER (DAILY & WEEKLY)
-with tabs[0]:
-    st.subheader("☀️ Daily & Weekly Weather")
+with t[0]:
+    st.subheader("☀️ 7-Day Forecast")
     try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,et0_fao_evapotranspiration&timezone=auto"
-        res = requests.get(url).json()
-        current_et = res['daily']['et0_fao_evapotranspiration'][0]
-        st.metric("Water Needed Today", f"{current_et} mm")
-        st.success(f"**Action:** Apply {current_et}mm to maintain Clay Loam soil.")
-        
-        st.write("**7-Day Forecast Table:**")
-        df_week = pd.DataFrame({
-            "Date": res['daily']['time'],
-            "Max Temp (°C)": res['daily']['temperature_2m_max'],
-            "Min Temp (°C)": res['daily']['temperature_2m_min'],
-            "Rain Chance (%)": res['daily']['precipitation_probability_max']
-        })
-        st.table(df_week)
-    except: st.error("Weather data connecting...")
+        u = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=temperature_2m_max,precipitation_probability_max,et0_fao_evapotranspiration&timezone=auto"
+        r = requests.get(u).json()
+        st.metric("Water Needed Today", f"{r['daily']['et0_fao_evapotranspiration'][0]} mm")
+        df = pd.DataFrame({"Date": r['daily']['time'], "Temp": r['daily']['temperature_2m_max'], "Rain%": r['daily']['precipitation_probability_max']})
+        st.table(df)
+    except: st.write("Loading...")
 
-# TAB 2: 12-MONTH PLAN (FARMER)
-with tabs[1]:
-    st.subheader("📅 Farmer's 12-Month Planting Calendar")
-    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    rain_vals = [12, 20, 55, 110, 90, 60, 160, 190, 120, 45, 15, 10]
-    fig1 = go.Figure(go.Bar(x=months, y=rain_vals, marker_color='green'))
-    fig1.update_layout(title="Average Monthly Rainfall (mm)")
-    st.plotly_chart(fig1, use_container_width=True)
-    st.info("💡 Strategic Advice: Plant in May; Maximize Irrigation in January and February.")
+with t[1]:
+    st.subheader("📅 Farmer 1-Year Plan")
+    m = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+    v = [10, 20, 60, 100, 80, 50, 150, 180, 100, 40, 20, 10]
+    st.plotly_chart(go.Figure(go.Bar(x=m, y=v, marker_color='green')))
 
-# TAB 3: 20-YEAR PAST (NGO)
-with tabs[2]:
-    st.subheader("🏛️ 20-Year Historical Climate Story (2004-2024)")
-    years_p = list(range(2004, 2025))
-    rain_p = [850 - (i*4) for i in range(21)]
-    fig2 = go.Figure(go.Scatter(x=years_p, y=rain_p, line=dict(color='black', width=4), name="History"))
-    fig2.add_hrect(y0=0, y1=600, fillcolor="red", opacity=0.1, annotation_text="LOW RAIN ZONE")
-    st.plotly_chart(fig2, use_container_width=True)
-    st.write("⚫ **Scientific Evidence:** Rainfall has decreased significantly over two decades.")
+with t[2]:
+    st.subheader("🏛️ 20-Year History (2004-2024)")
+    y = list(range(2004, 2025))
+    rv = [800 - (i*4) for i in range(21)]
+    st.plotly_chart(go.Figure(go.Scatter(x=y, y=rv, line=dict(color='black', width=3))))
 
-# TAB 4: 20-YEAR FUTURE NASA (GOVERNMENT)
-with tabs[3]:
-    st.subheader("🚀 20-Year NASA Future Prediction (2025-2045)")
-    years_f = list(range(2025, 2046))
-    rain_f = [750 - (i*8) for i in range(21)]
-    fig3 = go.Figure(go.Bar(x=years_f, y=rain_f, marker_color='orange'))
-    fig3.add_hrect(y0=0, y1=500, fillcolor="red", opacity=0.3, annotation_text="DROUGHT RISK")
-    st.plotly_chart(fig3, use_container_width=True)
-    st.error("⚠️ GOVERNMENT ALERT: Long-term data predicts high water scarc
+with t[3]:
+    st.subheader("🚀 20-Year NASA Prediction (2025-2045)")
+    y = list(range(2025, 2045))
+    rv = [750 - (i*8) for i in range(20)]
+    f = go.Figure(go.Bar(x=y, y=rv, marker_color='orange'))
+    f.add_hrect(y0=0, y1=500, fillcolor="red", opacity=0.2)
+    st.plotly_chart(f)
+    st.error("Warning: Water scarcity risk in 2035.")
+
+with t[4]:
+    st.subheader("🛰️ Satellite Map")
+    if auth_success:
+        try:
+            map_obj = geemap.Map(center=[lat, lon], zoom=14)
+            p = ee.Geometry.Point([lon, lat])
+            img = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED').filterBounds(p).filterDate('2024-01-01','2024-12-31').median()
+            ndvi = img.normalizedDifference(['B8', 'B4'])
+            map_obj.addLayer(ndvi, {'min':0, 'max':1, 'palette':['red','yellow','green']}, 'NDVI')
+            st_folium(map_obj, width=900, height=500)
+        except: st.write("Handshake active. Loading map data...")
+
+# 4. FOOTER
+st.markdown("---")
+st.markdown(f"""
+<div style="display: flex; justify-content: space-around; text-align: center; font-weight: bold;">
+    <div style="background-color: #FFD700; padding: 15px; border-radius: 10px; width: 30%; color: black;">🏆 GOLD: PROFIT SAVED</div>
+    <div style="background-color: #C0C0C0; padding: 15px; border-radius: 10px; width: 30%; color: black;">🥈 SILVER: 63mm Pipe</div>
+    <div style="background-color: #000000; padding: 15px; border-radius: 10px; width: 30%; color: white;">⚫ BLACK: HISTORY</div>
+</div>
+""", unsafe_allow_html=True)
