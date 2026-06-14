@@ -4,14 +4,16 @@ from streamlit_folium import st_folium
 import pandas as pd
 import plotly.graph_objects as go
 
-# --- 1. THE PERFECT CONNECTION ---
+# --- 1. THE PERMANENT HANDSHAKE FIX ---
 ok = False
-if 'GEE_JSON' in st.secrets:
+if "EE_PRIVATE_KEY" in st.secrets:
     try:
-        # Read the single string from secrets
-        info = json.loads(st.secrets['GEE_JSON'])
-        cred = ee.ServiceAccountCredentials(info['client_email'], key_data=json.dumps(info))
-        ee.Initialize(cred, project=info['project_id'])
+        # We use the separate parts from your secret box
+        credentials = ee.ServiceAccountCredentials(
+            st.secrets["EE_CLIENT_EMAIL"],
+            key_data=st.secrets["EE_PRIVATE_KEY"]
+        )
+        ee.Initialize(credentials, project=st.secrets["EE_PROJECT_ID"])
         ok = True
         st.sidebar.success("Handshake: SUCCESS ✅")
     except Exception as e:
@@ -20,6 +22,7 @@ if 'GEE_JSON' in st.secrets:
 # --- 2. MULTILINGUAL ---
 langs = {"English": {"b1":"Weather", "b2":"Farmer", "b3":"Past", "b4":"Future", "b5":"Map"},
          "Amharic (አማርኛ)": {"b1":"አየር ሁኔታ", "b2":"እቅድ", "b3":"ታሪክ", "b4":"ትንበያ", "b5":"ካርታ"}}
+
 st.set_page_config(layout="wide")
 sel = st.sidebar.selectbox("🌐 Language", list(langs.keys()))
 tx = langs[sel]
@@ -37,9 +40,9 @@ with t[0]:
         u = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=et0_fao_evapotranspiration,temperature_2m_max&timezone=auto"
         r = requests.get(u).json()
         et = r['daily']['et0_fao_evapotranspiration'][0]
-        st.metric("Water Lost Today", f"{et} mm")
+        st.metric("Water Needed Today", f"{et} mm")
         st.success(f"Advice: Apply {et}mm to Soil.")
-    except: st.write("Loading...")
+    except: st.write("Weather loading...")
 
 with t[1]:
     st.subheader("📅 Farmer Plan")
@@ -67,11 +70,11 @@ with t[4]:
             ndvi = img.normalizedDifference(['B8', 'B4'])
             m_obj.addLayer(ndvi, {'min':0, 'max':0.8, 'palette':['red','yellow','green']}, 'NDVI')
             st_folium(m_obj, height=500, width=1000)
-        except Exception as e: st.write(f"Wait: {e}")
-    else: st.error("Check Step 1 Secret.")
+        except Exception as e: st.write(f"Map Connecting: {e}")
+    else: st.error("Please ensure the Secret Box in Streamlit matches Step 1.")
 
 st.markdown("---")
 c1, c2, c3 = st.columns(3)
-c1.warning("🏆 GOLD: PROFIT")
+c1.warning("🏆 GOLD: PROFIT SAVED")
 c2.info("🥈 SILVER: 63mm PIPE")
-c3.success("⚫ BLACK: HISTORY")
+c3.success("⚫ BLACK: HISTORY DATA")
